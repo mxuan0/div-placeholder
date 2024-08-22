@@ -6,6 +6,10 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+def list_lambda(input_list: list, func):
+    return [func(e) for e in input_list]
+
+
 def read_parquet_as_df(path: str, num_sample: int=None) -> pd.DataFrame:
     if os.path.isdir(path):        
         # Find all parquet files in the directory
@@ -50,4 +54,4 @@ def download_images_multithread(image_urls, max_workers=32, timeout=5):
         for future in as_completed(future_to_url):
             images.append(future.result())
 
-    return images
+    return [image for image in images if image is not None]

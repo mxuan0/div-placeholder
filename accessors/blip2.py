@@ -57,4 +57,4 @@ class Blip2Accessor:
             generated_ids = self.model.generate(**inputs)
             generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
             
-            return [text.strip() for text in generated_text]
+            return [[text.strip() for text in generated_text]]
