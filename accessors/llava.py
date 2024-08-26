@@ -7,15 +7,18 @@ from functools import partial
 import torch, pdb
 
 
+# FORMAT = "Give the response in one sentence "
+FORMAT = ""
+
 def mistral_7b_prompt_fomatter(prompt: str):
-    return f"[INST] <image>\n{prompt} Give the response in one sentence [/INST]"
+    return f"[INST] <image>\n{prompt} {FORMAT}[/INST]"
 
 
 def mistral_7b_response_extractor(response: str, prompt: str):
-    start_marker = f"[INST]  \n{prompt} Give the response in one sentence [/INST]"
-    
+    start_marker = f"[INST]  \n{prompt} {FORMAT}[/INST]"
     return response.split(start_marker)[-1].replace('\n', ' ').strip()
     
+    # return response.replace('\n', ' ').strip()
 
 PROMPT_FORMATTER = {
     "llava-hf/llava-v1.6-mistral-7b-hf": {
@@ -59,6 +62,7 @@ class LlavaAccessor:
             device_map=self.device, 
             cache_dir=self.cache_dir,
             quantization_config=quantization_config,
+            # torch_dtype=torch.float16,
             # use_flash_attention_2=True
         )
         
@@ -102,7 +106,7 @@ class LlavaAccessor:
         ).to(self.device)
 
         # Generate
-        generate_ids = self.model.generate(**inputs, max_new_tokens=35)
+        generate_ids = self.model.generate(**inputs, max_new_tokens=25)
         del inputs
         generated_text = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         del generate_ids

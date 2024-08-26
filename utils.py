@@ -10,6 +10,24 @@ def list_lambda(input_list: list, func):
     return [func(e) for e in input_list]
 
 
+def filter_none_collate_fn(batch):
+    images = []
+    urls = []
+    original_captions = []
+
+    for item in batch:
+        if item["image"] is not None:
+            images.append(item["image"])
+            urls.append(item["image_id"])
+            original_captions.append(item["caption"])
+
+    return {
+        "image_id": urls,
+        "image": images,
+        "caption": original_captions
+    }
+
+
 def read_parquet_as_df(path: str, num_sample: int=None) -> pd.DataFrame:
     if os.path.isdir(path):        
         # Find all parquet files in the directory

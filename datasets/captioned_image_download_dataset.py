@@ -14,7 +14,7 @@ class CaptionedImageDownloadDataset(Dataset):
         url = self.urls[idx]
         
         return {
-            "url": url,
+            "image_id": url,
             "image": download_image(url),
             "caption": self.captions[idx]
         }

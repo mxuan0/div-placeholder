@@ -1,4 +1,4 @@
-from utils import download_image
+from utils import download_image, filter_none_collate_fn
 from torch.utils.data import DataLoader
 from datasets.captioned_image_download_dataset import CaptionedImageDownloadDataset
 
@@ -30,24 +30,7 @@ class URLImageLoader:
 
 
 def create_captioned_image_download_loader(urls, captions, batch_size, num_workers=2):
-    def _filter_none_collate_fn(batch):
-        images = []
-        urls = []
-        original_captions = []
-
-        for item in batch:
-            if item["image"] is not None:
-                images.append(item["image"])
-                urls.append(item["url"])
-                original_captions.append(item["caption"])
-
-        return {
-            "image_path": urls,
-            "image": images,
-            "caption": original_captions
-        }
-
     dataset = CaptionedImageDownloadDataset(urls, captions)
-    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=_filter_none_collate_fn, num_workers=num_workers)
+    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=filter_none_collate_fn, num_workers=num_workers)
 
     return dataloader

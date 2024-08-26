@@ -1,7 +1,9 @@
 from accessors.blip2 import Blip2Accessor
 from accessors.llava import LlavaAccessor
 from dataloaders.url_image_loader import URLImageLoader, create_captioned_image_download_loader
-from utils import read_parquet_as_df
+from datasets.datacomp_downloaded_dataset import DatacompDownloadedDataset
+from torch.utils.data import DataLoader
+from utils import read_parquet_as_df, filter_none_collate_fn
 from tqdm import tqdm
 from prompts.generators.prompt_from_config import PromptFromConfig
 
@@ -21,7 +23,8 @@ def main():
     parser.add_argument('--cache_dir', type=str, default='/data/jingdong')
     parser.add_argument('--datasource', type=str, default='datacomp')
     parser.add_argument('--num_samples', type=int, default=None)
-    parser.add_argument('--dataset_location', type=str, default='/data/jingdong/datacomp/small/metadata')
+    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--dataset_location', type=str, default='/data/jingdong/datacomp/small/shards/00000000')
     parser.add_argument('--result_location', type=str, default='/data/jingdong/datacomp/small/generated_captions/blip2-opt-6b-coco')
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=128)
@@ -39,26 +42,28 @@ def main():
 
     prompts = captioner.prompts if hasattr(captioner, 'prompts') else None
     
-    image_loader = get_image_loader(args.datasource, args.dataset_location, args.num_samples, args.batch_size)
+    image_loader = get_image_loader(args)
     print("Finished loading data loaders")
 
     all_generated_captions = []
-    all_image_paths = []
+    all_image_ids = []
     all_original_captions = []
     partition = 0
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(image_loader)):
             images = batch["image"]
+
             if not images:
                 continue
-            image_paths = batch["image_path"]
+            
+            image_ids = batch["image_id"]
             original_captions = batch['caption']
 
             captions_per_prompt = captioner.generate_caption(images)
                 
             all_original_captions += original_captions
-            all_image_paths += image_paths
+            all_image_ids += image_ids
 
             if not all_generated_captions:
                 all_generated_captions = captions_per_prompt
@@ -66,15 +71,15 @@ def main():
                 for i in range(len(all_generated_captions)):
                     all_generated_captions[i] += captions_per_prompt[i]
 
-            if len(all_image_paths) > args.storage_size:
+            if len(all_image_ids) > args.storage_size:
                 filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.tsv")
-                save_captions(all_image_paths, all_original_captions, all_generated_captions, filename, prompts)
+                save_captions(all_image_ids, all_original_captions, all_generated_captions, filename, prompts)
                 
                 partition += 1
         
         if all_original_captions:
             filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.tsv")
-            save_captions(all_image_paths, all_original_captions, all_generated_captions, filename, prompts)
+            save_captions(all_image_ids, all_original_captions, all_generated_captions, filename, prompts)
 
 
 def get_captioner(args):
@@ -88,20 +93,27 @@ def get_captioner(args):
         raise NotImplementedError
 
 
-def get_image_loader(datasource, dataset_location, num_samples, batch_size):
-    if datasource == 'datacomp':
-        df = read_parquet_as_df(dataset_location, num_sample=num_samples)
+def get_image_loader(args):
+    if args.datasource == 'datacomp_url':
+        df = read_parquet_as_df(args.dataset_location, num_sample=args.num_samples)
         urls = df["url"].tolist()
         original_captions = df["text"].tolist()
 
-        return create_captioned_image_download_loader(urls, original_captions, batch_size)
+        return create_captioned_image_download_loader(urls, original_captions, args.batch_size, num_workers=args.num_workers)
+    elif args.datasource == 'datacomp':
+        return DataLoader(
+            DatacompDownloadedDataset(args.dataset_location), 
+            batch_size=args.batch_size, 
+            collate_fn=filter_none_collate_fn,
+            num_workers=args.num_workers
+        )
     else:
         raise NotImplementedError
 
 
-def save_captions(image_paths: list, original_captions: list, generated_captions: list, filename: str, prompts=None):
+def save_captions(image_id: list, original_captions: list, generated_captions: list, filename: str, prompts=None):
     columns = {
-        'image_paths': image_paths,
+        'image_id': image_id,
         'original_captions': original_captions,
     }
 
@@ -116,7 +128,7 @@ def save_captions(image_paths: list, original_captions: list, generated_captions
 
     pd.DataFrame(columns).to_csv(filename, index=False, sep='\t')
     
-    image_paths.clear()
+    image_id.clear()
     original_captions.clear()
     generated_captions.clear()
 

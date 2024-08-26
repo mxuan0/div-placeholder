@@ -1,5 +1,6 @@
 # from prompts.configs.llava_generator_diverse_description import prompts as llava_generator_diverse_description_prompts
-from prompts.configs.llava_generator_diverse_description_25_describe import prompts as llava_generator_diverse_description_prompts
+from prompts.configs.llava_generator_diverse_description_5_describe import prompts as llava_generator_diverse_description_prompts
+# from prompts.configs.llava_generator_diverse_description_1_sent import prompts as llava_generator_diverse_description_prompts
 
 
 MODEL_TO_PROMPTS = {
