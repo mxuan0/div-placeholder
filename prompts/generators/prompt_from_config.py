@@ -2,9 +2,9 @@
 from prompts.configs.llava_generator_diverse_description_5_describe import prompts as llava_generator_diverse_description_prompts
 # from prompts.configs.llava_generator_diverse_description_1_sent import prompts as llava_generator_diverse_description_prompts
 
-
 MODEL_TO_PROMPTS = {
-    "llava-hf/llava-v1.6-mistral-7b-hf": llava_generator_diverse_description_prompts
+    "llava-hf/llava-v1.6-mistral-7b-hf": llava_generator_diverse_description_prompts,
+    "llava-hf/llama3-llava-next-8b-hf": llava_generator_diverse_description_prompts
 }
 
 

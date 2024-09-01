@@ -1,2 +1,8 @@
 __pycache__*
-*temp*
+**temp**
+**playground.py
+*.npy
+*.npz
+*.tsv
+*.pkl
+*.index

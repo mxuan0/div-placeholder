@@ -1,7 +1,7 @@
 from PIL import Image
 from transformers import AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, BitsAndBytesConfig
 from prompts.generators.prompt_from_config import PromptFromConfig
-from utils import list_lambda
+from utils import list_lambda, normalize_whitespace
 from functools import partial
 
 import torch, pdb
@@ -16,14 +16,32 @@ def mistral_7b_prompt_fomatter(prompt: str):
 
 def mistral_7b_response_extractor(response: str, prompt: str):
     start_marker = f"[INST]  \n{prompt} {FORMAT}[/INST]"
-    return response.split(start_marker)[-1].replace('\n', ' ').strip()
+    return response.split(start_marker)[-1]
     
     # return response.replace('\n', ' ').strip()
+
+
+def llama3_prompt_formatter(prompt: str):
+    return "<|start_header_id|>system<|end_header_id|>\n\n" +\
+    "You are a helpful language and vision assistant. You are able to understand the visual "+\
+    "content that the user provides, and assist the user with a variety of tasks using natural language."+\
+    "<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\n"+\
+    f"{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+
+
+def llama3_response_extractor(response: str, prompt: str):
+    return response.split("assistant")[-1]
+
 
 PROMPT_FORMATTER = {
     "llava-hf/llava-v1.6-mistral-7b-hf": {
         "formatter": mistral_7b_prompt_fomatter,
         "response_extractor": mistral_7b_response_extractor
+    },
+
+    "llava-hf/llama3-llava-next-8b-hf": {
+        "formatter": llama3_prompt_formatter,
+        "response_extractor": llama3_response_extractor
     }
 }
 
@@ -61,16 +79,17 @@ class LlavaAccessor:
             self.model_type, 
             device_map=self.device, 
             cache_dir=self.cache_dir,
-            quantization_config=quantization_config,
-            # torch_dtype=torch.float16,
-            # use_flash_attention_2=True
+            # quantization_config=quantization_config,
+            torch_dtype=torch.float16,
+            attn_implementation="flash_attention_2"
         )
         
         processor = AutoProcessor.from_pretrained(
             self.model_type,
             cache_dir=self.cache_dir
         )
-
+        
+        # model.config.pad_token_id = 2
         return model, processor
 
     def _create_captioning_prompts(self):
@@ -106,11 +125,11 @@ class LlavaAccessor:
         ).to(self.device)
 
         # Generate
-        generate_ids = self.model.generate(**inputs, max_new_tokens=25)
+        generate_ids = self.model.generate(**inputs, max_new_tokens=35, pad_token_id=2)
         del inputs
         generated_text = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         del generate_ids
-        
+        # pdb.set_trace()
         return [
             list_lambda(
                 generated_text[i*n_image : (i+1)*n_image], 

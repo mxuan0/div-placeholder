@@ -1,9 +1,53 @@
+from tqdm import tqdm
 import pandas as pd
 import os
+import re
 import glob
 from PIL import Image
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+def random_sample_from_parquet_in_dir(input_path, frac, output_path):
+    dfs = []
+    for file in tqdm(os.listdir(input_path)):
+        if file.endswith('.parquet'):
+            full_path = os.path.join(input_path, file)
+            
+            df = pd.read_parquet(full_path)
+            dfs.append(df)
+
+    filtered_df = pd.concat(dfs, ignore_index=True).sample(frac=frac)
+    
+    print(len(filtered_df))
+    filtered_df.to_parquet(output_path)
+
+
+def remove_extra_newlines_in_generated_captions(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    
+    processed_lines = [lines[0]]
+    current_line = ""
+    
+    for line in lines[1:]:
+        if re.match(r'^\d{12}', line):  # Check if the line starts with 12 digits
+            if current_line:  # If there is content in current_line, add it to processed_lines
+                processed_lines.append(current_line)
+            current_line = line.strip()  # Start a new line
+        else:
+            current_line += ' ' + line.strip()  # Append to the previous line
+    
+    if current_line:  # Add the last line
+        processed_lines.append(current_line)
+    
+    with open(file_path, 'w') as f:
+        f.write('\n'.join(processed_lines))
+
+
+def normalize_whitespace(text):
+    # Replace newline, tab, or multiple spaces with a single space
+    return re.sub(r'\s+', ' ', text).strip()
 
 
 def list_lambda(input_list: list, func):

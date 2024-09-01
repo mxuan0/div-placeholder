@@ -3,7 +3,7 @@ from accessors.llava import LlavaAccessor
 from dataloaders.url_image_loader import URLImageLoader, create_captioned_image_download_loader
 from datasets.datacomp_downloaded_dataset import DatacompDownloadedDataset
 from torch.utils.data import DataLoader
-from utils import read_parquet_as_df, filter_none_collate_fn
+from utils import read_parquet_as_df, filter_none_collate_fn, list_lambda, normalize_whitespace
 from tqdm import tqdm
 from prompts.generators.prompt_from_config import PromptFromConfig
 
@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description="Process some keyword arguments.")
 
     parser.add_argument('--captioner', type=str, default='llava')
+    parser.add_argument('--model_type', type=str, default=None)
     parser.add_argument('--cache_dir', type=str, default='/data/jingdong')
     parser.add_argument('--datasource', type=str, default='datacomp')
     parser.add_argument('--num_samples', type=int, default=None)
@@ -48,7 +49,16 @@ def main():
     all_generated_captions = []
     all_image_ids = []
     all_original_captions = []
+
     partition = 0
+    existing_result = os.listdir(args.result_location)
+    if existing_result:
+        try:
+            partitions = [int(path.split('.')[0].split('_')[-1]) for path in existing_result]
+            partition = max(partitions) + 1
+        except Exception as e:
+            print(e)
+    print(f"next partition is {partition}")
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(image_loader)):
@@ -72,13 +82,13 @@ def main():
                     all_generated_captions[i] += captions_per_prompt[i]
 
             if len(all_image_ids) > args.storage_size:
-                filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.tsv")
+                filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.parquet")
                 save_captions(all_image_ids, all_original_captions, all_generated_captions, filename, prompts)
-                
+        
                 partition += 1
         
         if all_original_captions:
-            filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.tsv")
+            filename = os.path.join(args.result_location, f"{file_prefix}_{partition}.parquet")
             save_captions(all_image_ids, all_original_captions, all_generated_captions, filename, prompts)
 
 
@@ -87,7 +97,7 @@ def get_captioner(args):
         return Blip2Accessor(device=args.device, cache_dir=args.cache_dir), None
     
     elif args.captioner == 'llava':
-        return LlavaAccessor(args, device=args.device, cache_dir=args.cache_dir)
+        return LlavaAccessor(args, device=args.device, cache_dir=args.cache_dir, model_type=args.model_type)
         
     else:
         raise NotImplementedError
@@ -102,7 +112,7 @@ def get_image_loader(args):
         return create_captioned_image_download_loader(urls, original_captions, args.batch_size, num_workers=args.num_workers)
     elif args.datasource == 'datacomp':
         return DataLoader(
-            DatacompDownloadedDataset(args.dataset_location), 
+            DatacompDownloadedDataset(args.dataset_location, args.result_location), 
             batch_size=args.batch_size, 
             collate_fn=filter_none_collate_fn,
             num_workers=args.num_workers
@@ -114,7 +124,7 @@ def get_image_loader(args):
 def save_captions(image_id: list, original_captions: list, generated_captions: list, filename: str, prompts=None):
     columns = {
         'image_id': image_id,
-        'original_captions': original_captions,
+        'original_captions': list_lambda(original_captions, normalize_whitespace),
     }
 
     if prompts is None:
@@ -124,10 +134,13 @@ def save_captions(image_id: list, original_captions: list, generated_captions: l
         caption_col_names = prompts
 
     for i in range(len(caption_col_names)):
-        columns[caption_col_names[i]] = generated_captions[i]
-
-    pd.DataFrame(columns).to_csv(filename, index=False, sep='\t')
+        columns[caption_col_names[i]] = list_lambda(generated_captions[i], normalize_whitespace)
     
+    
+    try:
+        pd.DataFrame(columns).to_parquet(filename)
+    except Exception:
+        pdb.set_trace()
     image_id.clear()
     original_captions.clear()
     generated_captions.clear()
