@@ -7,7 +7,7 @@ from functools import partial
 from multiprocessing import Pool
 
 
-class ImportanceFacilityLocation:
+class CSSKmeans:
     def __init__(self, devices, dtype=torch.float32):
         self.devices = devices
         assert len(devices) > 0
